@@ -1,0 +1,5 @@
+"main.obj",
+"DS1302.obj",
+"ADC.obj" 
+TO "GPSCalibrateClock" 
+RAMSIZE(256) 

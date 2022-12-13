@@ -1,0 +1,366 @@
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE main.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "STC15F2K.h"
+   2          #include <string.h>
+   3          #include "LED.h"
+   4          #include "ADC.h"
+   5          #include "Definition.h"
+   6          
+   7          extern void init_ds1302_io();
+   8          extern void init_ds1302();
+   9          extern void read_time();
+  10          extern void write_time();
+  11          
+  12          extern uchar Secs;
+  13          extern uchar Mins;
+  14          extern uchar Hours;              
+  15          
+  16          /*void Delayms(uint t)
+  17          {
+  18                  unsigned char i, j;
+  19           
+  20                  i= 6;
+  21                  j= 211;
+  22                  do
+  23                  {
+  24                           while(--j);
+  25                  }while (--i);
+  26          }*/
+  27          void  Delayms()
+  28          {
+  29   1           unsigned int i;
+  30   1           i = FOSC / 14000L / 10; //1T
+  31   1           while(--i)  ;
+  32   1      }
+  33          
+  34          
+  35          void Uart_Init()
+  36          {
+  37   1              ACC = P_SW1;
+  38   1          ACC &= ~(S1_S0 | S1_S1);    //S1_S0=0 S1_S1=0
+  39   1          P_SW1 = ACC;                //(P3.0/RxD, P3.1/TxD)
+  40   1      
+  41   1          SCON = 0x50;                //8位可变波特率
+  42   1      
+  43   1          T2L = (65536 - (FOSC/4/BAUD));   //设置波特率重装值
+  44   1          T2H = (65536 - (FOSC/4/BAUD))>>8;
+  45   1          AUXR = 0x14;                //T2为1T模式, 并启动定时器2
+  46   1          AUXR |= 0x01;               //选择定时器2为串口1的波特率发生器
+  47   1          ES = 1;                     //使能串口1中断
+  48   1          EA = 1;
+  49   1      }
+  50          
+  51          
+  52          char menu=0;
+  53          
+  54          void Timer2_isr()
+  55          {
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 2   
+
+  56   1              S12=0;S1=1;
+  57   1              P2=LED0[table[0]];
+  58   1              Delayms();      
+  59   1              S1=0;S2=1;
+  60   1              if(flag==0)P2=LED1[table[1]];
+  61   1              if(flag==1)P2=LED0[table[1]];
+  62   1              Delayms();
+  63   1              S2=0;S3=1;
+  64   1              P2=LED0[table[2]];      
+  65   1              Delayms();
+  66   1              S3=0;S4=1;
+  67   1              P2=LED0[table[3]];
+  68   1              Delayms();      
+  69   1      //////////////////////////////////////////////////////
+  70   1              P2=0xff;
+  71   1              S4=0;S5=1;
+  72   1              P2=g_LED2[t_led0[0]]&g_LED3[t_led1[0]];
+  73   1              Delayms();              
+  74   1      
+  75   1              P2=0xff;
+  76   1              S5=0;S6=1;
+  77   1              P2=g_LED2[t_led0[1]]&g_LED3[t_led1[1]];
+  78   1              Delayms();              
+  79   1      
+  80   1              P2=0xff;
+  81   1              S6=0;S7=1;
+  82   1              P2=g_LED2[t_led0[2]]&g_LED3[t_led1[2]];
+  83   1              Delayms();              
+  84   1      
+  85   1              P2=0xff;
+  86   1              S7=0;S8=1;
+  87   1              P2=g_LED2[t_led0[3]]&g_LED3[t_led1[3]];
+  88   1              Delayms();              
+  89   1      
+  90   1              P2=0xff;
+  91   1              S8=0;S9=1;
+  92   1              P2=g_LED2[t_led0[4]]&g_LED3[t_led1[4]];
+  93   1              Delayms();              
+  94   1      
+  95   1              P2=0xff;
+  96   1              S9=0;S10=1;
+  97   1              P2=g_LED2[t_led0[5]]&g_LED3[t_led1[5]];
+  98   1              Delayms();      
+  99   1      
+ 100   1              P2=0xff;
+ 101   1              S10=0;S11=1;
+ 102   1              P2=g_LED2[t_led0[6]]&g_LED3[t_led1[6]];
+ 103   1              Delayms();      
+ 104   1      
+ 105   1              P2=0xff;
+ 106   1              S11=0;S12=1;
+ 107   1              P2=g_LED2[t_led0[7]]&g_LED3[t_led1[7]];
+ 108   1              Delayms();      
+ 109   1      
+ 110   1              //S1=S2=S3=S4=S5=S6=S7=S8=S9=S10=S11=S12=1;
+ 111   1              //P2=0xff;
+ 112   1              //S1=S2=S3=S4=S5=S6=S7=S8=S9=S10=S11=S12=0;
+ 113   1              //Delayms(2);
+ 114   1      }
+ 115          
+ 116          void uart1_isr() interrupt 4 using 1
+ 117          {
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 3   
+
+ 118   1              unsigned char RecBuf;
+ 119   1              
+ 120   1          if (RI)
+ 121   1          {
+ 122   2                      RecBuf=SBUF;
+ 123   2              RI = 0;                 //清除RI位
+ 124   2                      //SBUF=RecBuf;
+ 125   2                      if (!count1)
+ 126   2                      {
+ 127   3                              if (!count)
+ 128   3                              {
+ 129   4                                      g_RecBuf = RecBuf;
+ 130   4                              }
+ 131   3                              else
+ 132   3                              {
+ 133   4                                      g_RecBuf = g_RecBuf | (RecBuf << 8);
+ 134   4                                      if (g_RecBuf == GPSTOKEN) count1++;
+ 135   4                                      g_RecBuf = 0;
+ 136   4                              }
+ 137   3                              count = ~count;
+ 138   3                      }
+ 139   2                      else if (count1 == 4)
+ 140   2                      {
+ 141   3                              UTC_Hours = (RecBuf - 48) << 4;
+ 142   3                              count1++;
+ 143   3                      }
+ 144   2                      else if (count1 == 5)
+ 145   2                      {
+ 146   3                              UTC_Hours |= RecBuf - 48;
+ 147   3                              //UTC_Hours += 0x8;
+ 148   3                              count1++;
+ 149   3                      }
+ 150   2                      else if (count1 == 6)
+ 151   2                      {
+ 152   3                              UTC_Mins = (RecBuf - 48) << 4;
+ 153   3                              count1++;
+ 154   3                      }
+ 155   2                      else if (count1 == 7)
+ 156   2                      {
+ 157   3                              UTC_Mins |= RecBuf - 48;
+ 158   3                              count1++;
+ 159   3                      }
+ 160   2                      else if (count1 == 8)
+ 161   2                      {
+ 162   3                              UTC_Secs = (RecBuf - 48) << 4;
+ 163   3                              count1++;
+ 164   3                      }
+ 165   2                      else if (count1 == 9)
+ 166   2                      {
+ 167   3                              UTC_Secs |= RecBuf - 48;
+ 168   3                              count1++;
+ 169   3                      }
+ 170   2                      else if (count1 > 9 && RecBuf == ',')
+ 171   2                      {
+ 172   3                              Next_Flag = true;
+ 173   3                              count1++;
+ 174   3                      }
+ 175   2                      else if (Next_Flag)
+ 176   2                      {
+ 177   3                              if (RecBuf != 65)
+ 178   3                              {
+ 179   4                                      UTC_Hours = 0;
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 4   
+
+ 180   4                                      UTC_Mins = 0;
+ 181   4                                      UTC_Secs = 0;
+ 182   4                              }
+ 183   3                              else
+ 184   3                              {
+ 185   4                                      if (UTC_Hours == 0x0 || UTC_Hours == 0x1 || UTC_Hours == 0x10 || UTC_Hours == 0x11)
+ 186   4                                              UTC_Hours += 0x8;
+ 187   4                                      else if (UTC_Hours >= 0x2 && UTC_Hours <= 0x9 || (UTC_Hours >= 0x12 && UTC_Hours <= 0x15))
+ 188   4                                              UTC_Hours += 0xE;
+ 189   4                                      else if (UTC_Hours >= 0x16 && UTC_Hours <= 0x19)
+ 190   4                                              UTC_Hours -= 0x16;
+ 191   4                                      else if (UTC_Hours >= 20 && UTC_Hours <= 0x24)
+ 192   4                                              UTC_Hours -= 0x1C;
+ 193   4                                      if(Secs != UTC_Secs || Mins != UTC_Mins || Hours != UTC_Hours)
+ 194   4                                      {
+ 195   5                                              ET1 = 1;
+ 196   5      
+ 197   5                                              Hours = UTC_Hours;
+ 198   5                                              Mins = UTC_Mins;
+ 199   5                                              Secs = UTC_Secs;
+ 200   5                                              write_time();
+ 201   5                                      }
+ 202   4                                      
+ 203   4                              }
+ 204   3                              count1 = 0;
+ 205   3                              Next_Flag = false;
+ 206   3                                      
+ 207   3                      }
+ 208   2                      else
+ 209   2                      {
+ 210   3                              count1++;
+ 211   3                      }
+ 212   2                      
+ 213   2                      
+ 214   2          }
+ 215   1          if (TI)
+ 216   1          {
+ 217   2              TI = 0;                 //清除TI位
+ 218   2              busy = 0;               //清忙标志
+ 219   2          }
+ 220   1      }
+ 221          
+ 222          
+ 223          
+ 224          void main()
+ 225          {
+ 226   1              uchar i;
+ 227   1          //Timer0Init();     
+ 228   1              InitADC();
+ 229   1              init_ds1302_io();
+ 230   1              init_ds1302();
+ 231   1      
+ 232   1              P3M0=0xf8;P3M1=0x00;
+ 233   1              P2M0=0xff;P2M1=0x00;
+ 234   1              P1M0=0xff;P1M1=0x00;
+ 235   1              P5M0=0x10;P5M1=0x00;
+ 236   1              Uart_Init();
+ 237   1              
+ 238   1              while(1)
+ 239   1              {
+ 240   2                      
+ 241   2                      if(menu==0)
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 5   
+
+ 242   2                      {
+ 243   3                              read_time();
+ 244   3                              if(Secs%2)
+ 245   3                              {
+ 246   4                                      flag = 1;
+ 247   4                                      table[0]=Hours/16;
+ 248   4                                      table[1]=Hours%16;
+ 249   4                                      table[2]=Mins/16;
+ 250   4                                      table[3]=Mins%16;
+ 251   4                              }
+ 252   3                              else
+ 253   3                              {
+ 254   4                                       flag = 0;
+ 255   4                              }
+ 256   3      
+ 257   3                              for(i=0;i<8;i++)t_led1[i]=i;
+ 258   3                              for(i=0;i<8;i++)t_led0[i]=8;
+ 259   3      
+ 260   3                              if(Secs==0x01)t_led0[0]=0;
+ 261   3                              if(Secs==0x02)t_led0[0]=1;
+ 262   3                              if(Secs==0x03)t_led0[0]=2;
+ 263   3                              if(Secs==0x04)t_led0[0]=3;
+ 264   3                              if(Secs==0x05)t_led0[0]=4;
+ 265   3                              if(Secs==0x06)t_led0[0]=5;
+ 266   3                              if(Secs==0x07)t_led0[0]=6;
+ 267   3                              if(Secs==0x08)t_led0[0]=7;
+ 268   3                      
+ 269   3                              if(Secs==0x09)t_led0[1]=0;
+ 270   3                              if(Secs==0x10)t_led0[1]=1;
+ 271   3                              if(Secs==0x11)t_led0[1]=2;
+ 272   3                              if(Secs==0x12)t_led0[1]=3;
+ 273   3                              if(Secs==0x13)t_led0[1]=4;
+ 274   3                              if(Secs==0x14)t_led0[1]=5;
+ 275   3                              if(Secs==0x15)t_led0[1]=6;
+ 276   3                              if(Secs==0x16)t_led0[1]=7;
+ 277   3                      
+ 278   3                              if(Secs==0x17)t_led0[2]=0;
+ 279   3                              if(Secs==0x18)t_led0[2]=1;
+ 280   3                              if(Secs==0x19)t_led0[2]=2;
+ 281   3                              if(Secs==0x20)t_led0[2]=3;
+ 282   3                              if(Secs==0x21)t_led0[2]=4;
+ 283   3                              if(Secs==0x22)t_led0[2]=5;
+ 284   3                              if(Secs==0x23)t_led0[2]=6;
+ 285   3                              if(Secs==0x24)t_led0[2]=7;
+ 286   3                      
+ 287   3                              if(Secs==0x25)t_led0[3]=0;
+ 288   3                              if(Secs==0x26)t_led0[3]=1;
+ 289   3                              if(Secs==0x27)t_led0[3]=2;
+ 290   3                              if(Secs==0x28)t_led0[3]=3;
+ 291   3                              if(Secs==0x29)t_led0[3]=4;
+ 292   3                              if(Secs==0x30)t_led0[3]=5;
+ 293   3                              if(Secs==0x31)t_led0[3]=6;
+ 294   3                              if(Secs==0x32)t_led0[3]=7;
+ 295   3                      
+ 296   3                              if(Secs==0x33)t_led0[4]=0;
+ 297   3                              if(Secs==0x34)t_led0[4]=1;
+ 298   3                              if(Secs==0x35)t_led0[4]=2;
+ 299   3                              if(Secs==0x36)t_led0[4]=3;
+ 300   3                              if(Secs==0x37)t_led0[4]=4;
+ 301   3                              if(Secs==0x38)t_led0[4]=5;
+ 302   3                              if(Secs==0x39)t_led0[4]=6;
+ 303   3                              if(Secs==0x40)t_led0[4]=7;
+C51 COMPILER V9.01   MAIN                                                                  05/29/2019 21:17:31 PAGE 6   
+
+ 304   3                      
+ 305   3                              if(Secs==0x41)t_led0[5]=0;
+ 306   3                              if(Secs==0x42)t_led0[5]=1;
+ 307   3                              if(Secs==0x43)t_led0[5]=2;
+ 308   3                              if(Secs==0x44)t_led0[5]=3;
+ 309   3                              if(Secs==0x45)t_led0[5]=4;
+ 310   3                              if(Secs==0x46)t_led0[5]=5;
+ 311   3                              if(Secs==0x47)t_led0[5]=6;
+ 312   3                              if(Secs==0x48)t_led0[5]=7;
+ 313   3                      
+ 314   3                              if(Secs==0x49)t_led0[6]=0;
+ 315   3                              if(Secs==0x50)t_led0[6]=1;
+ 316   3                              if(Secs==0x51)t_led0[6]=2;
+ 317   3                              if(Secs==0x52)t_led0[6]=3;
+ 318   3                              if(Secs==0x53)t_led0[6]=4;
+ 319   3                              if(Secs==0x54)t_led0[6]=5;
+ 320   3                              if(Secs==0x55)t_led0[6]=6;
+ 321   3                              if(Secs==0x56)t_led0[6]=7;
+ 322   3                      
+ 323   3                              if(Secs==0x57)t_led0[7]=0;
+ 324   3                              if(Secs==0x58)t_led0[7]=1;
+ 325   3                              if(Secs==0x59)t_led0[7]=2;
+ 326   3                              if(Secs==0x00)t_led0[7]=3;                              
+ 327   3                      }
+ 328   2      
+ 329   2                      Timer2_isr();
+ 330   2                      Delayms();                                              
+ 331   2              }
+ 332   1      }
+ 333          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1243    ----
+   CONSTANT SIZE    =     23    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     51    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

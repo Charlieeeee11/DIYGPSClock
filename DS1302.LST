@@ -1,0 +1,174 @@
+C51 COMPILER V9.01   DS1302                                                                05/29/2019 21:17:31 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE DS1302
+OBJECT MODULE PLACED IN DS1302.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE DS1302.c BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "STC15F2K.h"           
+   2          
+   3          /******************
+   4                  ds1302 内部RAM   RAM0  1100 000R/W   1读 0写
+   5                                                   RAM1  1100 001R/W  
+   6                                                         ....... 
+   7                                                   RAM30 1111 110R/W   
+   8          ********************/
+   9          
+  10          sbit clk = P3^2;          //ds1302时钟线定义
+  11          sbit io =  P3^1;          //数据线
+  12          sbit rst = P5^5;          //复位线
+  13                                                          
+  14          uchar code write_add[]={0x80,0x82,0x84};        
+  15          uchar code init_ds[]  ={0x55,0x17,0x15,0x01,0x01,0x13,0x13};   
+  16          uchar Secs,Mins,Hours;//,ri,yue,week,nian=0x20;
+  17          
+  18          
+  19          /*************写一个数据到对应的地址里***************/
+  20          void write_ds1302(uchar add,uchar dat)
+  21          {
+  22   1              uchar i;                
+  23   1              rst = 1;                         //把复位线拿高
+  24   1              for(i=0;i<8;i++)
+  25   1              {                                    //低位在前
+  26   2                      clk = 0;                 //时钟线拿低开始写数据
+  27   2                      io = add & 0x01;        
+  28   2                      add >>= 1;               //把地址右移一位
+  29   2                      clk = 1;                 //时钟线拿高
+  30   2              }       
+  31   1              for(i=0;i<8;i++)
+  32   1              {
+  33   2                      clk = 0;                 //时钟线拿低开始写数据
+  34   2                      io = dat & 0x01;
+  35   2                      dat >>= 1;               //把数据右移一位
+  36   2                      clk = 1;                 //时钟线拿高
+  37   2              }
+  38   1              rst = 0;                         //复位线合低
+  39   1              clk = 0;
+  40   1              io = 0;
+  41   1      }
+  42          
+  43          /*************从对应的地址读一个数据出来***************/
+  44          uchar read_ds1302(uchar add)
+  45          {
+  46   1              uchar value,i;
+  47   1              rst = 1;                         //把复位线拿高
+  48   1              for(i=0;i<8;i++)
+  49   1              {                                    //低位在前
+  50   2                      clk = 0;                 //时钟线拿低开始写数据
+  51   2                      io = add & 0x01;        
+  52   2                      add >>= 1;               //把地址右移一位
+  53   2                      clk = 1;                 //时钟线拿高
+  54   2              }               
+  55   1              for(i=0;i<8;i++)
+C51 COMPILER V9.01   DS1302                                                                05/29/2019 21:17:31 PAGE 2   
+
+  56   1              {
+  57   2                      clk = 0;                 //时钟线拿低开始读数据
+  58   2                      value >>= 1;
+  59   2                      if(io == 1)
+  60   2                              value |= 0x80;
+  61   2                      clk = 1;                 //时钟线拿高
+  62   2              }
+  63   1              rst = 0;                         //复位线合低
+  64   1              clk = 0;
+  65   1              io = 0;
+  66   1              return value;            //返回读出来的数据
+  67   1      }
+  68          
+  69          /*************把要的时间 年月日 都读出来***************/
+  70          void read_time()
+  71          {
+  72   1              Secs = read_ds1302(0x81);       //读秒
+  73   1      
+  74   1              Mins  = read_ds1302(0x83);      //读分
+  75   1              Hours  = read_ds1302(0x85);     //读时
+  76   1      
+  77   1      //      ri   = read_ds1302(read_add[3]);        //读日
+  78   1      //      yue  = read_ds1302(read_add[4]);        //读月
+  79   1      //      nian = read_ds1302(read_add[5]);        //读年
+  80   1      //      week = read_ds1302(read_add[6]);        //读星期
+  81   1      }
+  82          
+  83          #define CLOCK_STOP 0x80 //bit7=1,clock disable
+  84          #define CLOCK_WORK 0x7f //bit7=0,clock enable
+  85          /*************把要写的时间 年月日 都写入ds1302里***************/
+  86          void write_time()
+  87          {
+  88   1              
+  89   1              write_ds1302(0x8e,0x00);                        //关闭写保护
+  90   1              write_ds1302(0x80,(Secs | CLOCK_STOP));
+  91   1              write_ds1302(0x82,Mins);                //写分
+  92   1              write_ds1302(0x84,Hours);               //写时
+  93   1              write_ds1302(0x80,(Secs & CLOCK_WORK));
+  94   1      //      write_ds1302(write_add[3],ri);          //写日
+  95   1      //      write_ds1302(write_add[4],yue);         //写月
+  96   1      //      write_ds1302(write_add[5],nian);        //写年
+  97   1      //      write_ds1302(write_add[6],week);        //写星期
+  98   1      
+  99   1      
+ 100   1              write_ds1302(0x8e,0x80);                        //打开写保护
+ 101   1      }
+ 102          
+ 103          /*************把数据保存到ds1302 RAM中**0-31*************/
+ 104          void write_ds1302ram(uchar add,uchar dat)
+ 105          {
+ 106   1              add <<= 1;     //地址是从第二位开始的
+ 107   1              add &= 0xfe;   //把最低位清零  是写的命令
+ 108   1              add |= 0xc0;   //地址最高两位为 1  
+ 109   1              write_ds1302(0x8e,0x00);
+ 110   1              write_ds1302(add,dat);  
+ 111   1              write_ds1302(0x8e,0x80);
+ 112   1      }
+ 113          
+ 114          /*************把数据从ds1302 RAM读出来**0-31*************/
+ 115          uchar read_ds1302ram(uchar add)
+ 116          {
+ 117   1              add <<= 1;     //地址是从第二位开始的
+C51 COMPILER V9.01   DS1302                                                                05/29/2019 21:17:31 PAGE 3   
+
+ 118   1              add |= 0x01;   //把最高位置1  是读命令
+ 119   1              add |= 0xc0;   //地址最高两位为 1  
+ 120   1              return(read_ds1302(add));       
+ 121   1      }
+ 122          
+ 123          /*************初始化ds1302时间***************/
+ 124          void init_ds1302()
+ 125          {
+ 126   1              uchar i;
+ 127   1              rst = 0;        //第一次读写数据时要把IO品拿低
+ 128   1              clk = 0;
+ 129   1              io = 0;
+ 130   1              i = read_ds1302ram(30);   
+ 131   1              if(i != 3)
+ 132   1              {       
+ 133   2                      i = 3;
+ 134   2                      write_ds1302ram(30,i);
+ 135   2                      write_ds1302(0x8e,0x00);                    //打开写保护
+ 136   2                      for(i=0;i<3;i++)
+ 137   2                              write_ds1302(write_add[i],init_ds[i]);  //把最高位值0 允许ds1302工作
+ 138   2                      write_ds1302(0x8e,0x80);        //关写保护
+ 139   2              }
+ 140   1      }
+ 141          
+ 142          void init_ds1302_io()
+ 143          {
+ 144   1              rst = 0;        //第一次读写数据时要把IO品拿低
+ 145   1              clk = 0;
+ 146   1              io = 0; 
+ 147   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    275    ----
+   CONSTANT SIZE    =     10    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
